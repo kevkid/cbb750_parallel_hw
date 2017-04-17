@@ -12,7 +12,7 @@ colors = ['r','b','g','k']
 def speedup(p,n):#input proportion and number of processors
     speedup = []
     for processors in n:
-        speedup.append((1-p) + p/processors)#value of speed up
+        speedup.append(1/((1-p) + p/processors))#value of speed up
     return speedup
 
 for idx, proportion in enumerate(proportions):
