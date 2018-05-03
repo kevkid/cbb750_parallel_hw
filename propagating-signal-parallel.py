@@ -1,64 +1,59 @@
+'''PARALLEL, NOT USING INITIALIZATION'''
 from matplotlib import pyplot
+import numpy
 import time
+from multiprocessing import Pool, Array
 import multiprocessing
-
-#initialize some multiprocessing stuff
-num_processes = 4
-y = multiprocessing.Array('d', 1000, lock=False)
-new_y = multiprocessing.Array('d', 1000, lock=False)
-dt = multiprocessing.Value('d',0, lock=False)
-y_len = multiprocessing.Value('i',len(y), lock=False)
-#def init_process(y_to_share, new_y_to_share):
-#	global y, new_y
-#	y = y_to_share
-#	new_y = new_y_to_share
-#
-#process_pool = multiprocessing.Pool(
-#                   num_processes,
-#                   initializer=init_process,
-#                   initargs=(y, new_y))
-
-
+import sys
 start = time.time()
+
 # initial conditions
-#y = [0] * 1000
+size = 1000
+num_processors = 2
+
+y = multiprocessing.Array('d', 1000, lock=False)
 y[480:520] = [1] * 40
-#check y values
-#[e for e in set(y)]
-#[e for e in set(new_y)]
-#[e for e in set(arr)]
+
+#break up data, start-end
+start_end = []
+chunk_size = size//num_processors
+for i in range(num_processors):
+    start_end.append([i*chunk_size,chunk_size*(i+1)])
+
+# parameters
+D = 20         # diffusion constant/dx^2
+alpha = 0.3    # threshold
+
 # time-step
-dt.value = 0.01
+dt = 0.01
 
 # our rule for reaction-diffusion
-def advance(j):
-    #print y_idx
-    #new_y[j]
-    result = (y[j] + dt.value * (20 * (y[j - 1] - 2 * y[j] + y[(j + 1) % y_len.value])
-						   - y[j] * (1 - y[j]) * (0.3 - y[j])))
-    y[j] = result
-    return result
+def advance(start_end):
+    start = start_end[0]
+    end = start_end[1]
+    #print("hello, I am worker: {}".format(multiprocessing.current_process()))
+    #print("start:{} end:{}".format(start,end))
+    #sys.stdout.flush()
+    new_y = list(y)
+    for j in range(start,end):
+        # diffusion via forward Euler
+        new_y[j] += dt * (D * (y[j - 1] - 2 * y[j] + y[(j + 1) % size]))
 
-# advance through t (t = i * dt) is at least 100; plot
-# every 20
-i = 0
-p = multiprocessing.Pool(num_processes)
-y_range = range(len(y))
-while i * dt.value <= 100:
-    if i * dt.value % 20 == 0:
-        pyplot.plot(y, label='t = %g' % (i * dt.value))
-    arr = p.map(advance, y_range)
-    #p.close()
-    #p.join()
-#    for idx in range(len(arr)):
-#        y[idx] = arr[idx]
-    i += 1
-    print i * dt.value
-end = time.time()
+        # reaction via forward Euler
+        new_y[j] += dt * -y[j] * (1 - y[j]) * (alpha - y[j])
 
-elapsed = end-start
-print elapsed
+    return new_y[start:end]
+
+
+pool = multiprocessing.Pool(processes=num_processors) #instantiate pool
+# advance through t is at least 100; plot every 20
+for t in numpy.arange(0, 100 + dt, dt):
+    if t % 20 == 0:
+        pyplot.plot(y, label='t = %g' % t)
+    result = pool.map(advance, start_end)
+    y[:] = [item for sublist in result for item in sublist]
+
+print('calculation: {} s'.format(time.time() - start))
+
 pyplot.legend()
 pyplot.show()
-
-ny = list(y)
